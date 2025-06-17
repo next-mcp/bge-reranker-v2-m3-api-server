@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y \
     make \
     libc6-dev \
     pkg-config \
+    zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # 设置工作目录
