@@ -1,0 +1,276 @@
+name: Test, Build and Release
+
+# 触发条件
+on:
+  # 推送到 main 分支
+  push:
+    branches: [ main, master ]
+    tags:
+      - 'v*.*.*'          # 正式版本标签 (v1.0.0, v1.2.3, etc.)
+      - 'v*.*.*-*'        # 预发布版本标签 (v1.2.4-alpha.0, v1.0.0-beta.1, etc.)
+  
+  # Pull Request 到 main 分支
+  pull_request:
+    branches: [ main, master ]
+  
+  # 手动触发
+  workflow_dispatch:
+
+# 权限设置
+permissions:
+  contents: write  # 创建 release 需要写权限
+  packages: write  # 发布包需要写权限
+
+# 环境变量
+env:
+  DOCKER_IMAGE: yarnovo/bge-reranker-v2-m3-api-server
+  PLATFORMS: linux/amd64,linux/arm64
+
+# 定义作业
+jobs:
+  # 代码质量检查作业
+  quality:
+    name: Code Quality Check
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        python-version: ["3.12"]
+    
+    steps:
+      # 检出代码
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      # 设置 Python
+      - name: Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+      
+      # 安装 uv
+      - name: Install uv
+        run: pip install uv
+      
+      # 安装依赖
+      - name: Install dependencies
+        run: uv sync --dev
+      
+      # 运行所有检查（使用预定义的 scripts）
+      - name: Run all quality checks
+        run: uv run bge-reranker-check
+      
+      # 运行测试（使用预定义的 scripts）
+      - name: Run tests
+        run: uv run bge-reranker-test
+
+  # Docker构建作业
+  docker-build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs: quality
+    
+    steps:
+      # 检出代码
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      # 设置Docker Buildx
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      # 构建测试镜像（不推送）
+      - name: Build test image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: ${{ env.PLATFORMS }}
+          push: false
+          tags: ${{ env.DOCKER_IMAGE }}:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # 发布Docker镜像作业
+  docker-publish:
+    name: Publish Docker Image
+    runs-on: ubuntu-latest
+    needs: [quality, docker-build]
+    # 只有在 push 事件且标签匹配 v*.*.* 格式时才运行
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+      # 检出代码
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      # 设置Docker Buildx
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      # 登录到Docker Hub
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_ACCESS_TOKEN }}
+      
+      # 提取版本信息
+      - name: Extract version
+        id: version
+        run: |
+          TAG_VERSION=${GITHUB_REF#refs/tags/v}
+          echo "Tag version: $TAG_VERSION"
+          
+          # 检测是否为预发布版本
+          if [[ "$TAG_VERSION" =~ -.*$ ]]; then
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+            echo "🔄 Detected prerelease version: $TAG_VERSION"
+          else
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+            echo "🚀 Detected stable version: $TAG_VERSION"
+          fi
+          
+          echo "version=$TAG_VERSION" >> $GITHUB_OUTPUT
+      
+      # 构建并推送Docker镜像
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: ${{ env.PLATFORMS }}
+          push: true
+          tags: |
+            ${{ steps.version.outputs.is_prerelease == 'false' && format('{0}:latest', env.DOCKER_IMAGE) || '' }}
+            ${{ env.DOCKER_IMAGE }}:${{ steps.version.outputs.version }}
+            ${{ steps.version.outputs.is_prerelease == 'true' && format('{0}:prerelease', env.DOCKER_IMAGE) || '' }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          labels: |
+            org.opencontainers.image.title=BGE Reranker v2-m3 API Server
+            org.opencontainers.image.description=FastAPI server for BGE Reranker v2-m3 model - High-performance multilingual text reranking service
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ github.event.repository.updated_at }}
+      
+      # 创建 GitHub Release
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ steps.version.outputs.is_prerelease == 'true' && format('Prerelease {0}', github.ref_name) || format('Release {0}', github.ref_name) }}
+          body: |
+            ## ${{ steps.version.outputs.is_prerelease == 'true' && '🔄 Prerelease' || '🚀 Release' }} ${{ github.ref_name }}
+            
+            ${{ steps.version.outputs.is_prerelease == 'true' && '⚠️ **这是一个预发布版本，可能包含未完全测试的功能，建议在生产环境中谨慎使用。**' || '' }}
+            
+            基于 [BAAI BGE Reranker v2-m3](https://huggingface.co/BAAI/bge-reranker-v2-m3) 模型的高性能多语言文本重排序 FastAPI 服务。
+            
+            ### 🐋 Docker 镜像
+            ```bash
+            # 拉取指定版本
+            docker pull ${{ env.DOCKER_IMAGE }}:${{ steps.version.outputs.version }}
+            
+            ${{ steps.version.outputs.is_prerelease == 'false' && format('# 拉取最新稳定版本\ndocker pull {0}:latest', env.DOCKER_IMAGE) || format('# 拉取最新预发布版本\ndocker pull {0}:prerelease', env.DOCKER_IMAGE) }}
+            
+            # 直接运行
+            docker run -d \
+              --name bge-reranker-server \
+              -p 8000:8000 \
+              --restart unless-stopped \
+              ${{ env.DOCKER_IMAGE }}:${{ steps.version.outputs.version }}
+            ```
+            
+            ### 🔧 Docker Compose 配置
+            ```yaml
+            services:
+              bge-reranker:
+                image: ${{ env.DOCKER_IMAGE }}:${{ steps.version.outputs.version }}
+                container_name: bge-reranker-v2-m3-api-server
+                ports:
+                  - "8000:8000"
+                environment:
+                  - BGE_MODEL_NAME=BAAI/bge-reranker-v2-m3
+                  - BGE_USE_FP16=true
+                volumes:
+                  - ./models:/root/.cache/huggingface  # 缓存模型
+                restart: unless-stopped
+            ```
+            
+            ### 📦 源码安装
+            ```bash
+            # 直接从源码安装
+            pip install git+https://github.com/${{ github.repository }}.git@${{ github.ref_name }}
+            
+            # 启动服务器
+            bge-reranker-server --host 0.0.0.0 --port 8000
+            ```
+            
+            ### 🚀 快速开始
+            ```bash
+            # 使用 Docker 快速启动
+            docker run -d \
+              --name bge-reranker-server \
+              -p 8000:8000 \
+              ${{ env.DOCKER_IMAGE }}:${{ steps.version.outputs.version }}
+            
+            # 测试API
+            curl -X POST "http://localhost:8000/rerank" \
+              -H "Content-Type: application/json" \
+              -d '{
+                "query": "人工智能技术",
+                "documents": [
+                  "深度学习是人工智能的重要分支",
+                  "今天的天气很不错",
+                  "机器学习算法在AI中应用广泛"
+                ]
+              }'
+            ```
+            
+            ### 📋 更新内容
+            查看本版本的详细更新内容和代码变更，请访问：
+            **[📖 查看 ${{ github.ref_name }} 版本更新内容](${{ github.server_url }}/${{ github.repository }}/commits/${{ github.ref_name }})**
+            
+            ### 🔗 相关链接
+            - 🐋 Docker镜像: [Docker Hub](https://hub.docker.com/r/${{ env.DOCKER_IMAGE }})
+            - 🤗 原始模型: [Hugging Face](https://huggingface.co/BAAI/bge-reranker-v2-m3)
+            - 📖 完整文档: [README.md](./README.md)
+            - 💻 源代码: [GitHub Repository](${{ github.server_url }}/${{ github.repository }})
+            
+            ---
+            **⚠️ 注意**: 首次启动时需要下载模型文件（约 568MB），请确保网络连接稳定。
+          draft: false
+          prerelease: ${{ steps.version.outputs.is_prerelease == 'true' }}
+
+  # 状态检查作业
+  status-check:
+    name: Status Check
+    runs-on: ubuntu-latest
+    needs: [quality, docker-build, docker-publish]
+    if: always()
+    
+    steps:
+      - name: Check quality results
+        run: |
+          if [ "${{ needs.quality.result }}" != "success" ]; then
+            echo "❌ Code quality checks failed"
+            exit 1
+          fi
+          echo "✅ All quality checks passed"
+      
+      - name: Check docker build results
+        run: |
+          if [ "${{ needs.docker-build.result }}" != "success" ]; then
+            echo "❌ Docker build failed"
+            exit 1
+          fi
+          echo "✅ Docker build successful"
+      
+      - name: Check publish results
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        run: |
+          if [ "${{ needs.docker-publish.result }}" != "success" ]; then
+            echo "❌ Docker publishing failed"
+            exit 1
+          fi
+          echo "✅ Docker publishing successful" 

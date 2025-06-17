@@ -1,0 +1,169 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "bge-reranker-v2-m3-api-server"
+version = "0.0.0"
+description = "FastAPI server for BGE Reranker v2-m3 model - A high-performance multilingual text reranking service"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+authors = [
+    { name = "yarnovo", email = "yarnb@qq.com" },
+]
+keywords = ["bge", "reranker", "nlp", "fastapi", "api", "multilingual"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+dependencies = [
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "FlagEmbedding>=1.2.10",
+    "torch>=2.0.0",
+    "transformers>=4.36.0",
+    "pydantic>=2.5.0",
+    "python-multipart>=0.0.6",
+    "httpx>=0.28.1",
+    "requests>=2.31.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/yourusername/bge-reranker-v2-m3-api-server"
+Repository = "https://github.com/yourusername/bge-reranker-v2-m3-api-server.git"
+Issues = "https://github.com/yourusername/bge-reranker-v2-m3-api-server/issues"
+
+[project.scripts]
+bge-reranker-server = "bge_reranker_v2_m3_api_server.cli:main"
+bge-reranker-test = "bge_reranker_v2_m3_api_server.scripts:run_tests"
+bge-reranker-lint = "bge_reranker_v2_m3_api_server.scripts:run_lint"
+bge-reranker-format = "bge_reranker_v2_m3_api_server.scripts:run_format"
+bge-reranker-check = "bge_reranker_v2_m3_api_server.scripts:check_all"
+bge-reranker-pre-commit-install = "bge_reranker_v2_m3_api_server.scripts:install_pre_commit"
+bge-reranker-pre-commit-update = "bge_reranker_v2_m3_api_server.scripts:update_pre_commit"
+
+# Ruff configuration
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "E501",  # line too long, handled by formatter
+    "B008",  # do not perform function calls in argument defaults
+    "C901",  # too complex
+    "W191",  # indentation contains tabs
+    "D",     # pydocstyle (documentation)
+    "ANN",   # flake8-annotations
+    "COM",   # flake8-commas
+    "EM",    # flake8-errmsg
+    "FBT",   # flake8-boolean-trap
+    "TRY",   # tryceratops
+    "S",     # flake8-bandit
+    "PLR",   # pylint refactor
+    "PLW",   # pylint warnings
+    "PLC",   # pylint conventions
+    "T201",  # print found - allow in examples and tests
+    "BLE001", # blind except - allow in examples
+    "SLF001", # private member access - allow in tests
+    "RUF001", # ambiguous unicode character in string
+    "RUF002", # ambiguous unicode character in docstring
+    "RUF003", # ambiguous unicode character in comment
+    "G004",   # logging statement uses f-string
+    "PGH003", # use specific rule codes when ignoring type issues
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["bge_reranker_v2_m3_api_server"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+# Pyright configuration
+[tool.pyright]
+include = ["bge_reranker_v2_m3_api_server", "examples"]
+exclude = ["**/__pycache__"]
+pythonVersion = "3.12"
+pythonPlatform = "All"
+typeCheckingMode = "basic"
+reportMissingImports = true
+reportMissingTypeStubs = false
+reportUnusedImport = true
+reportUnusedClass = "warning"
+reportUnusedFunction = "warning"
+reportUnusedVariable = "warning"
+reportDuplicateImport = "warning"
+reportPrivateUsage = "none"
+reportCallIssue = "warning"
+venvPath = "."
+venv = ".venv"
+
+# Pytest configuration
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-ra -q --strict-markers --strict-config"
+testpaths = ["tests"]
+asyncio_mode = "auto"
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+]
+
+# Coverage configuration
+[tool.coverage.run]
+source = ["bge_reranker_v2_m3_api_server"]
+omit = [
+    "*/tests/*",
+    "*/test_*.py",
+    "*/__pycache__/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.0",
+    "pytest-asyncio>=1.0.0",
+    "pytest-cov>=6.2.1",
+    "ruff>=0.11.13",
+    "pyright>=1.1.402",
+    "pre-commit>=3.5.0",
+    "httpx>=0.28.1",
+]
+test = [
+    "pytest>=8.4.0",
+    "pytest-asyncio>=1.0.0",
+    "pytest-cov>=6.2.1",
+    "httpx>=0.28.1",
+]
+lint = [
+    "ruff>=0.11.13",
+    "pyright>=1.1.402",
+]

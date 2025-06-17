@@ -1,0 +1,53 @@
+services:
+  # BGE Reranker API 服务
+  bge-reranker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: yarnovo/bge-reranker-v2-m3-api-server:latest
+    container_name: bge-reranker-v2-m3-api-server
+    ports:
+      - "8000:8000"
+    environment:
+      # 模型配置
+      - BGE_MODEL_NAME=BAAI/bge-reranker-v2-m3
+      - BGE_USE_FP16=true
+      - BGE_DEVICE=auto
+      # 服务配置  
+      - UVICORN_HOST=0.0.0.0
+      - UVICORN_PORT=8000
+      - UVICORN_LOG_LEVEL=info
+      # 性能调优
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+    volumes:
+      # 缓存 Hugging Face 模型到本地
+      - ./models:/root/.cache/huggingface/hub
+      # 日志持久化
+      - ./logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          # 限制内存使用（根据实际需求调整）
+          memory: 4G
+        reservations:
+          memory: 2G
+    networks:
+      - bge-network
+
+# 网络配置
+networks:
+  bge-network:
+    driver: bridge
+
+# 数据卷
+volumes:
+  prometheus-data:
+  grafana-data: 

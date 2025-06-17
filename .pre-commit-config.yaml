@@ -1,0 +1,32 @@
+# Pre-commit hooks configuration
+repos:
+  # Local hooks using uv
+  - repo: local
+    hooks:
+      # Run ruff linter
+      - id: ruff
+        name: ruff
+        entry: uv run ruff check --fix
+        language: system
+        types: [python]
+        pass_filenames: false
+      
+      # Run ruff formatter
+      - id: ruff-format
+        name: ruff-format
+        entry: uv run ruff format
+        language: system
+        types: [python]
+        pass_filenames: false
+      
+      # Run pyright type checker
+      - id: pyright
+        name: pyright
+        entry: uv run pyright
+        language: system
+        types: [python]
+        pass_filenames: false
+
+# Configuration
+default_stages: [pre-commit]
+fail_fast: true 
