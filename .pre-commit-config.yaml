@@ -3,18 +3,18 @@ repos:
   # Local hooks using uv
   - repo: local
     hooks:
-      # Run ruff linter first (with fix)
-      - id: ruff-check
-        name: ruff-check
-        entry: uv run ruff check --fix
+      # Run ruff formatter first
+      - id: ruff-format
+        name: ruff-format
+        entry: uv run ruff format
         language: system
         types: [python]
         pass_filenames: false
       
-      # Run ruff formatter after linter (no fix needed)
-      - id: ruff-format
-        name: ruff-format
-        entry: uv run ruff format
+      # Run ruff linter after formatting
+      - id: ruff
+        name: ruff
+        entry: uv run ruff check --fix
         language: system
         types: [python]
         pass_filenames: false
