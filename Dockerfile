@@ -8,12 +8,21 @@ ENV UV_COMPILE_BYTECODE=1 \
 
 # 安装编译工具（用于构建需要编译的 Python 包）
 RUN apt-get update && apt-get install -y \
-    gcc \
-    g++ \
-    make \
-    libc6-dev \
-    pkg-config \
+    build-essential \
+    python3-dev \
+    libffi-dev \
+    libssl-dev \
     zlib1g-dev \
+    libbz2-dev \
+    libreadline-dev \
+    libsqlite3-dev \
+    libncurses5-dev \
+    libncursesw5-dev \
+    xz-utils \
+    tk-dev \
+    libxml2-dev \
+    libxmlsec1-dev \
+    liblzma-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # 设置工作目录
