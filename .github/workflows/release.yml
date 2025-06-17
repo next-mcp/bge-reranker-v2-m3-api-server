@@ -35,7 +35,7 @@ jobs:
     
     strategy:
       matrix:
-        python-version: ["3.12"]
+        python-version: ["3.11"]  # 与 .python-version 和 pyproject.toml 保持一致
     
     steps:
       # 检出代码
@@ -50,14 +50,20 @@ jobs:
       
       # 安装 uv
       - name: Install uv
-        run: pip install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+      
+      # 验证 uv 安装
+      - name: Verify uv installation
+        run: uv --version
       
       # 安装依赖
       - name: Install dependencies
         run: uv sync --dev
       
-      # 运行所有检查（使用预定义的 scripts）
-      - name: Run all quality checks
+      # 运行所有检查（使用项目定义的脚本）
+      - name: Run code quality checks
         run: uv run bge-reranker-check
       
       # 运行测试（使用预定义的 scripts）
@@ -89,6 +95,8 @@ jobs:
           tags: ${{ env.DOCKER_IMAGE }}:test
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: |
+            BUILDKIT_INLINE_CACHE=1
 
   # 发布Docker镜像作业
   docker-publish:
@@ -145,6 +153,8 @@ jobs:
             ${{ steps.version.outputs.is_prerelease == 'true' && format('{0}:prerelease', env.DOCKER_IMAGE) || '' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: |
+            BUILDKIT_INLINE_CACHE=1
           labels: |
             org.opencontainers.image.title=BGE Reranker v2-m3 API Server
             org.opencontainers.image.description=FastAPI server for BGE Reranker v2-m3 model - High-performance multilingual text reranking service
@@ -178,6 +188,9 @@ jobs:
               --name bge-reranker-server \
               -p 8000:8000 \
               --restart unless-stopped \
+              -e BGE_MODEL_NAME=BAAI/bge-reranker-v2-m3 \
+              -e BGE_USE_FP16=true \
+              -v $(pwd)/models:/root/.cache/huggingface/hub \
               ${{ env.DOCKER_IMAGE }}:${{ steps.version.outputs.version }}
             ```
             
@@ -192,18 +205,35 @@ jobs:
                 environment:
                   - BGE_MODEL_NAME=BAAI/bge-reranker-v2-m3
                   - BGE_USE_FP16=true
+                  - BGE_DEVICE=auto
+                  - UVICORN_HOST=0.0.0.0
+                  - UVICORN_PORT=8000
+                  - UVICORN_LOG_LEVEL=info
                 volumes:
-                  - ./models:/root/.cache/huggingface  # 缓存模型
+                  - ./models:/root/.cache/huggingface/hub
+                  - ./logs:/app/logs
                 restart: unless-stopped
+                healthcheck:
+                  test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+                  interval: 30s
+                  timeout: 10s
+                  retries: 3
+                  start_period: 60s
             ```
             
-            ### 📦 源码安装
+            ### 📦 源码安装 (使用 uv)
             ```bash
-            # 直接从源码安装
-            pip install git+https://github.com/${{ github.repository }}.git@${{ github.ref_name }}
+            # 克隆仓库
+            git clone https://github.com/${{ github.repository }}.git
+            cd ${{ github.repository }}
+            git checkout ${{ github.ref_name }}
+            
+            # 使用 uv 安装
+            pip install uv
+            uv sync
             
             # 启动服务器
-            bge-reranker-server --host 0.0.0.0 --port 8000
+            uv run bge-reranker-server --host 0.0.0.0 --port 8000
             ```
             
             ### 🚀 快速开始
@@ -212,9 +242,18 @@ jobs:
             docker run -d \
               --name bge-reranker-server \
               -p 8000:8000 \
+              -e BGE_MODEL_NAME=BAAI/bge-reranker-v2-m3 \
+              -e BGE_USE_FP16=true \
+              -v $(pwd)/models:/root/.cache/huggingface/hub \
               ${{ env.DOCKER_IMAGE }}:${{ steps.version.outputs.version }}
             
-            # 测试API
+            # 等待服务启动（首次启动需要下载模型）
+            sleep 60
+            
+            # 测试健康检查
+            curl http://localhost:8000/health
+            
+            # 测试重排序API
             curl -X POST "http://localhost:8000/rerank" \
               -H "Content-Type: application/json" \
               -d '{
@@ -231,14 +270,25 @@ jobs:
             查看本版本的详细更新内容和代码变更，请访问：
             **[📖 查看 ${{ github.ref_name }} 版本更新内容](${{ github.server_url }}/${{ github.repository }}/commits/${{ github.ref_name }})**
             
+            ### ⚡ 性能特性
+            - **多平台支持**: 支持 `linux/amd64` 和 `linux/arm64` 架构
+            - **GPU加速**: 自动检测并使用GPU（如果可用）
+            - **FP16优化**: 默认启用半精度浮点计算以提升性能
+            - **健康检查**: 内置健康检查端点便于容器编排
+            - **资源限制**: 支持Docker资源限制配置
+            
             ### 🔗 相关链接
-            - 🐋 Docker镜像: [Docker Hub](https://hub.docker.com/r/${{ env.DOCKER_IMAGE }})
-            - 🤗 原始模型: [Hugging Face](https://huggingface.co/BAAI/bge-reranker-v2-m3)
-            - 📖 完整文档: [README.md](./README.md)
-            - 💻 源代码: [GitHub Repository](${{ github.server_url }}/${{ github.repository }})
+            - 🐋 **Docker镜像**: [Docker Hub](https://hub.docker.com/r/${{ env.DOCKER_IMAGE }})
+            - 🤗 **原始模型**: [Hugging Face](https://huggingface.co/BAAI/bge-reranker-v2-m3)
+            - 📖 **完整文档**: [README.md](./README.md) | [README_EN.md](./README_EN.md)
+            - 💻 **源代码**: [GitHub Repository](${{ github.server_url }}/${{ github.repository }})
+            - 📊 **示例代码**: [examples/](./examples/)
             
             ---
-            **⚠️ 注意**: 首次启动时需要下载模型文件（约 568MB），请确保网络连接稳定。
+            **⚠️ 注意**: 
+            - 首次启动时需要下载模型文件（约 568MB），请确保网络连接稳定
+            - 建议为容器分配至少 2GB 内存以获得最佳性能
+            - GPU环境下性能更佳，推荐使用CUDA 12.8+
           draft: false
           prerelease: ${{ steps.version.outputs.is_prerelease == 'true' }}
 
