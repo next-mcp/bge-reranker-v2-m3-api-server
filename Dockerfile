@@ -1,34 +1,38 @@
-# 构建阶段：使用轻量级镜像安装依赖（适合GitHub Actions资源限制）
-FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS builder
+# 构建阶段：使用 PyTorch CUDA 开发镜像
+FROM pytorch/pytorch:2.7.1-cuda12.8-cudnn9-devel AS builder
+
+# 设置环境变量避免交互式配置
+ENV DEBIAN_FRONTEND=noninteractive
+
+# 从官方 uv 镜像复制二进制文件（推荐的最佳实践）
+COPY --from=ghcr.io/astral-sh/uv:0.7.13 /uv /uvx /bin/
 
 # 设置 uv 环境变量
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_PYTHON_DOWNLOADS=0
 
-# 安装必要的编译工具（最小化安装）
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
-
 # 设置工作目录
 WORKDIR /app
 
-# 安装CPU版本的PyTorch（避免下载大型CUDA包）
+# 安装GPU版本的依赖（使用默认PyTorch GPU版本）
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
-    uv sync --locked --no-install-project --no-dev --extra-index-url https://download.pytorch.org/whl/cpu
+    uv sync --locked --no-install-project --no-dev
 
 # 复制项目代码
 COPY . .
 
 # 安装项目
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --no-dev --extra-index-url https://download.pytorch.org/whl/cpu
+    uv sync --locked --no-dev
 
-# 运行阶段：使用最小的Python镜像
-FROM python:3.12-slim AS runtime
+# 运行阶段：使用 PyTorch CUDA 运行时镜像
+FROM pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime AS runtime
+
+# 设置环境变量避免交互式配置
+ENV DEBIAN_FRONTEND=noninteractive
 
 # 从构建阶段复制Python环境和应用
 COPY --from=builder /app /app
