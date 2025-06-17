@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 BGE Reranker v2-m3 API 基本使用示例
 
