@@ -1,19 +1,12 @@
 """Development scripts for BGE Reranker v2-m3 API Server."""
 
-import os
 import subprocess
 import sys
 from pathlib import Path
 
 
-def run_command(cmd: list[str], description: str, success_checker=None) -> bool:
-    """运行命令并返回是否成功.
-
-    Args:
-        cmd: 要执行的命令列表
-        description: 命令描述
-        success_checker: 可选的成功判断函数，接受(returncode, stdout, stderr)参数，返回bool
-    """
+def run_command(cmd: list[str], description: str) -> bool:
+    """运行命令并返回是否成功."""
     print(f"🔍 {description}...")
     print(f"执行命令: {' '.join(cmd)}")
 
@@ -25,45 +18,22 @@ def run_command(cmd: list[str], description: str, success_checker=None) -> bool:
             text=True,
             encoding="utf-8",
             errors="replace",
-            check=False,
+            check=True,
         )
-
-        # 打印输出
+        print(f"✅ {description} 成功")
         if result.stdout:
             print(result.stdout)
-        if result.stderr:
-            print(result.stderr)
-
-        # 使用自定义成功判断逻辑或默认逻辑
-        if success_checker:
-            is_success = success_checker(
-                result.returncode, result.stdout, result.stderr
-            )
-        else:
-            is_success = result.returncode == 0
-
-        if is_success:
-            print(f"✅ {description} 成功")
-            return True
-        print(f"❌ {description} 失败")
-        print(f"错误码: {result.returncode}")
-        return False
-
-    except Exception as e:
-        print(f"❌ {description} 失败")
-        print(f"异常: {e}")
-        return False
-
-
-def pytest_success_checker(returncode: int, stdout: str, _stderr: str) -> bool:
-    """pytest专用的成功判断函数：允许跳过的测试，但不允许失败的测试"""
-    if returncode == 0:
         return True
-
-    # 检查输出中是否只包含跳过的测试（没有真正的失败）
-    return bool(
-        stdout and "skipped" in stdout.lower() and "failed" not in stdout.lower()
-    )
+    except subprocess.CalledProcessError as e:
+        print(f"❌ {description} 失败")
+        print(f"错误码: {e.returncode}")
+        if e.stdout:
+            print("标准输出:")
+            print(e.stdout)
+        if e.stderr:
+            print("错误输出:")
+            print(e.stderr)
+        return False
 
 
 def format_code() -> bool:
@@ -83,23 +53,10 @@ def type_check() -> bool:
 
 def run_tests() -> bool:
     """运行测试."""
-    is_ci = os.getenv("CI", "false").lower() in ("true", "1", "yes")
-
-    if is_ci:
-        # CI环境：添加--tb=short减少输出，使用--maxfail=1快速失败
-        cmd = [
-            "pytest",
-            "tests/",
-            "-v",
-            "--cov=bge_reranker_v2_m3_api_server",
-            "--tb=short",
-            "--maxfail=1",
-        ]
-    else:
-        # 本地环境：保持详细输出
-        cmd = ["pytest", "tests/", "-v", "--cov=bge_reranker_v2_m3_api_server"]
-
-    return run_command(cmd, "运行测试", pytest_success_checker)
+    return run_command(
+        ["pytest", "tests/", "-v", "--cov=bge_reranker_v2_m3_api_server"],
+        "运行测试",
+    )
 
 
 def install_pre_commit() -> None:
@@ -176,6 +133,15 @@ def run_lint() -> None:
     success = lint_code()
     if not success:
         sys.exit(1)
+
+
+def test_entry() -> None:
+    """测试的入口函数，用于命令行调用."""
+    success = run_tests()
+    if not success:
+        sys.exit(1)
+    else:
+        sys.exit(0)
 
 
 def main() -> None:

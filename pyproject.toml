@@ -43,7 +43,7 @@ Issues = "https://github.com/yourusername/bge-reranker-v2-m3-api-server/issues"
 
 [project.scripts]
 bge-reranker-server = "bge_reranker_v2_m3_api_server.cli:main"
-bge-reranker-test = "bge_reranker_v2_m3_api_server.scripts:run_tests"
+bge-reranker-test = "bge_reranker_v2_m3_api_server.scripts:test_entry"
 bge-reranker-lint = "bge_reranker_v2_m3_api_server.scripts:run_lint"
 bge-reranker-format = "bge_reranker_v2_m3_api_server.scripts:run_format"
 bge-reranker-check = "bge_reranker_v2_m3_api_server.scripts:check_all"
