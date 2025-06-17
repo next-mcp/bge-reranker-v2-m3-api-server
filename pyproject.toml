@@ -2,8 +2,11 @@
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.hatch.build.targets.wheel]
+packages = ["bge_reranker_v2_m3_api_server"]
+
 [project]
-name = "bge-reranker-v2-m3-api-server"
+name = "bge_reranker_v2_m3_api_server"
 version = "0.0.0"
 description = "FastAPI server for BGE Reranker v2-m3 model - A high-performance multilingual text reranking service"
 readme = "README.md"

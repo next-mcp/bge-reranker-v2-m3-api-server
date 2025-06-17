@@ -1,46 +1,41 @@
-# 使用官方Python镜像作为基础镜像
-FROM python:3.12-slim
+# 构建阶段：使用官方 uv 镜像构建应用
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS builder
+
+# 设置 uv 环境变量
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=0
 
 # 设置工作目录
 WORKDIR /app
 
-# 设置环境变量
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    UV_CACHE_DIR=/tmp/uv-cache
+# 使用缓存和绑定挂载安装依赖（不安装项目本身）
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    uv sync --locked --no-install-project --no-dev
 
-# 安装系统依赖
-RUN apt-get update && apt-get install -y \
-    curl \
-    git \
-    && rm -rf /var/lib/apt/lists/*
+# 复制项目代码（使用 .dockerignore 排除不需要的文件）
+COPY . .
 
-# 安装 uv
-RUN pip install uv
+# 安装项目（非开发模式，适合生产环境）
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-dev
 
-# 复制项目配置文件
-COPY pyproject.toml ./
-COPY README.md ./
+# 生产阶段：使用匹配的 Python 基础镜像
+FROM python:3.12-slim-bookworm AS runtime
 
-# 安装Python依赖
-RUN uv pip install --system -e .
+# 从构建阶段复制应用程序
+COPY --from=builder /app /app
 
-# 复制项目代码
-COPY bge_reranker_v2_m3_api_server/ ./bge_reranker_v2_m3_api_server/
+# 设置 PATH 包含虚拟环境
+ENV PATH="/app/.venv/bin:$PATH"
 
-# 创建非root用户
-RUN useradd --create-home --shell /bin/bash app && \
-    chown -R app:app /app
-USER app
+# 设置工作目录
+WORKDIR /app
 
 # 暴露端口
 EXPOSE 8000
-
-# 健康检查
-HEALTHCHECK --interval=30s --timeout=30s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
 
 # 启动命令
 CMD ["bge-reranker-server", "--host", "0.0.0.0", "--port", "8000"] 

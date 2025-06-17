@@ -47,7 +47,4 @@ networks:
   bge-network:
     driver: bridge
 
-# 数据卷
-volumes:
-  prometheus-data:
-  grafana-data: 
+
