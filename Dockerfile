@@ -1,29 +1,13 @@
-# 构建阶段：使用官方 uv 镜像构建应用
-FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS builder
+# 单阶段构建：使用 PyTorch 官方镜像（已包含Python 3.12和所有AI依赖）
+FROM nvcr.io/nvidia/pytorch:24.12-py3
+
+# 安装 uv 包管理器
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
 # 设置 uv 环境变量
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_PYTHON_DOWNLOADS=0
-
-# 安装编译工具（用于构建需要编译的 Python 包）
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    python3-dev \
-    libffi-dev \
-    libssl-dev \
-    zlib1g-dev \
-    libbz2-dev \
-    libreadline-dev \
-    libsqlite3-dev \
-    libncurses5-dev \
-    libncursesw5-dev \
-    xz-utils \
-    tk-dev \
-    libxml2-dev \
-    libxmlsec1-dev \
-    liblzma-dev \
-    && rm -rf /var/lib/apt/lists/*
 
 # 设置工作目录
 WORKDIR /app
@@ -41,17 +25,8 @@ COPY . .
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-dev
 
-# 生产阶段：使用匹配的 Python 基础镜像
-FROM python:3.12-slim-bookworm AS runtime
-
-# 从构建阶段复制应用程序
-COPY --from=builder /app /app
-
 # 设置 PATH 包含虚拟环境
 ENV PATH="/app/.venv/bin:$PATH"
-
-# 设置工作目录
-WORKDIR /app
 
 # 暴露端口
 EXPOSE 8000
