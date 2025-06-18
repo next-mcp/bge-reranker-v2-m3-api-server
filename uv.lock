@@ -160,7 +160,7 @@ wheels = [
 
 [[package]]
 name = "bge-reranker-v2-m3-api-server"
-version = "0.0.0"
+version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
