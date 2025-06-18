@@ -31,7 +31,7 @@ jobs:
   # 代码质量检查作业
   quality:
     name: Code Quality Check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-4-cores
     
     strategy:
       matrix:
