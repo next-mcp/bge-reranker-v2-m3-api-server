@@ -117,10 +117,67 @@ jobs:
   # Docker构建作业
   docker-build:
     name: Build Docker Image
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-4-cores
     needs: quality
     
     steps:
+      # 打印系统信息（ubuntu-latest-4-cores runner）
+      - name: Print System Information (ubuntu-latest-4-cores)
+        run: |
+          echo "=== GitHub Runner Information ==="
+          echo "Runner OS: ${{ runner.os }}"
+          echo "Runner Architecture: ${{ runner.arch }}"
+          echo "GitHub Runner: ubuntu-latest-4-cores (4-cores · 16 GB RAM · 150 GB SSD)"
+          echo ""
+          echo "=== CPU Information ==="
+          echo "CPU Cores: $(nproc)"
+          echo "CPU Info:"
+          lscpu | head -20
+          echo ""
+          echo "=== Memory Information ==="
+          echo "Total Memory:"
+          free -h
+          echo ""
+          echo "Memory Details:"
+          cat /proc/meminfo | grep -E "MemTotal|MemFree|MemAvailable"
+          echo ""
+          echo "=== Disk Information ==="
+          echo "Disk Usage:"
+          df -h
+          echo ""
+          echo "Disk Details:"
+          lsblk
+          echo ""
+          echo "=== GPU Information ==="
+          if command -v nvidia-smi &> /dev/null; then
+            echo "NVIDIA GPU detected:"
+            nvidia-smi
+          else
+            echo "No NVIDIA GPU detected"
+          fi
+          echo ""
+          echo "=== Docker Information ==="
+          if command -v docker &> /dev/null; then
+            echo "Docker Version:"
+            docker --version
+            echo "Docker System Info:"
+            docker system df 2>/dev/null || echo "Docker system df not available"
+          else
+            echo "Docker not available"
+          fi
+          echo ""
+          echo "=== System Information ==="
+          echo "Kernel: $(uname -r)"
+          echo "OS Release:"
+          cat /etc/os-release | head -5
+          echo ""
+          echo "=== Performance Information ==="
+          echo "Load Average:"
+          uptime
+          echo ""
+          echo "Available Space:"
+          df -h /tmp /var/tmp 2>/dev/null || echo "Temp directories info not available"
+      
       # 检出代码
       - name: Checkout code
         uses: actions/checkout@v4
@@ -145,12 +202,41 @@ jobs:
   # 发布Docker镜像作业
   docker-publish:
     name: Publish Docker Image
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-4-cores
     needs: [quality, docker-build]
     # 只有在 push 事件且标签匹配 v*.*.* 格式时才运行
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     
     steps:
+      # 打印系统信息（ubuntu-latest-4-cores runner for publishing）
+      - name: Print System Information (ubuntu-latest-4-cores for publishing)
+        run: |
+          echo "=== GitHub Runner Information ==="
+          echo "Runner OS: ${{ runner.os }}"
+          echo "Runner Architecture: ${{ runner.arch }}"
+          echo "GitHub Runner: ubuntu-latest-4-cores (4-cores · 16 GB RAM · 150 GB SSD) - Publishing Job"
+          echo ""
+          echo "=== CPU Information ==="
+          echo "CPU Cores: $(nproc)"
+          echo "CPU Model:"
+          cat /proc/cpuinfo | grep "model name" | head -1
+          echo ""
+          echo "=== Memory Information ==="
+          echo "Total Memory:"
+          free -h
+          echo ""
+          echo "=== Disk Information ==="
+          echo "Disk Usage:"
+          df -h
+          echo ""
+          echo "=== Docker Information ==="
+          if command -v docker &> /dev/null; then
+            echo "Docker Version:"
+            docker --version
+            echo "Docker Info:"
+            docker info 2>/dev/null | head -20 || echo "Docker info not available"
+          fi
+      
       # 检出代码
       - name: Checkout code
         uses: actions/checkout@v4
