@@ -18,18 +18,17 @@ ENV UV_COMPILE_BYTECODE=1 \
 # 设置工作目录
 WORKDIR /app
 
-# 安装GPU版本的依赖（使用默认PyTorch GPU版本）
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
-    uv sync --locked --no-install-project --no-editable
+    uv sync --locked --no-install-project --no-editable --no-dev
 
 # 复制项目代码
 COPY . .
 
 # 安装项目
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked
+    uv sync --locked --no-dev
 
 # 运行阶段：使用 PyTorch CUDA 运行时镜像
 FROM pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime AS runtime
