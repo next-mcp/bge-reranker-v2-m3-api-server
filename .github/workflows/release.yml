@@ -73,7 +73,7 @@ jobs:
   # Docker构建作业
   docker-build:
     name: Build Docker Image
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-4-cores
     needs: quality
     
     steps:
@@ -101,7 +101,7 @@ jobs:
   # 发布Docker镜像作业
   docker-publish:
     name: Publish Docker Image
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-4-cores
     needs: [quality, docker-build]
     # 只有在 push 事件且标签匹配 v*.*.* 格式时才运行
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
