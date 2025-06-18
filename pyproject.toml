@@ -7,7 +7,7 @@ packages = ["bge_reranker_v2_m3_api_server"]
 
 [project]
 name = "bge_reranker_v2_m3_api_server"
-version = "0.1.0"
+version = "0.1.1a0"
 description = "FastAPI server for BGE Reranker v2-m3 model - A high-performance multilingual text reranking service"
 readme = "README.md"
 requires-python = ">=3.11"

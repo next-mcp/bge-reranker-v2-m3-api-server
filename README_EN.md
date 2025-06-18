@@ -221,9 +221,23 @@ uv version --bump major
 uv version 1.2.3
 ```
 
+#### Version Number Format Specification
+
+The project follows **PEP 440** version specification, with format: `[N!]N(.N)*[{a|b|rc}N][.postN][.devN]`
+
+**Version Type Details:**
+
+- **Stable versions**: `1.0.0`, `2.1.3` - Official release versions
+- **Pre-release versions**: Include the following types
+  - **Alpha versions**: `1.0.0a1`, `1.0.0a2` - Early development versions, features may be incomplete
+  - **Beta versions**: `1.0.0b1`, `1.0.0b2` - Features basically complete, undergoing testing
+  - **Release Candidate**: `1.0.0rc1`, `1.0.0rc2` - Release candidate version, close to final version
+  - **Development versions**: `1.0.0.dev1`, `1.0.0.dev2` - Development versions, used for builds during development
+  - **Post-release versions**: `1.0.0.post1`, `1.0.0.post2` - Fix versions, for small fixes to released versions
+
 #### Pre-release Version Management
 
-The project fully supports **PEP 440** standard pre-release version numbers, including:
+The project fully supports **PEP 440** standard pre-release version numbers:
 
 ```bash
 # Alpha version (1.0.0 -> 1.0.0a1)
@@ -237,6 +251,9 @@ uv version 1.0.0rc1
 
 # Development version (for continuous development)
 uv version 1.0.0.dev1
+
+# Post-release version (for small fixes)
+uv version 1.0.0.post1
 ```
 
 #### Release Process Best Practices
@@ -271,9 +288,14 @@ uv version 1.0.0.dev1
 #### Version and Docker Tag Correspondence
 
 - **Stable versions** (e.g., `1.0.0`): Push both `1.0.0` and `latest` tags
-- **Pre-release versions** (e.g., `1.0.0a1`, `1.0.0b1`, `1.0.0rc1`): **Only push version number tags**, do not push `latest`
+- **Pre-release versions**: **Only push version number tags and `prerelease` tag**, do not push `latest`
+  - Alpha versions (e.g., `v1.0.0a1`, `v1.0.0a2`): Push `1.0.0a1` and `prerelease`
+  - Beta versions (e.g., `v1.0.0b1`, `v1.0.0b2`): Push `1.0.0b1` and `prerelease`
+  - RC versions (e.g., `v1.0.0rc1`, `v1.0.0rc2`): Push `1.0.0rc1` and `prerelease`
+  - Dev versions (e.g., `v1.0.0.dev1`, `v1.0.0.dev2`): Push `1.0.0.dev1` and `prerelease`
+  - Post versions (e.g., `v1.0.0.post1`, `v1.0.0.post2`): Push `1.0.0.post1` and `prerelease`
 
-This ensures the `latest` tag always points to the latest stable version, while pre-release versions don't affect production environment users.
+This ensures the `latest` tag always points to the latest stable version, while the `prerelease` tag points to the latest pre-release version, ensuring pre-release versions don't affect production environment users.
 
 #### Automated Workflow
 
