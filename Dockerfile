@@ -4,8 +4,11 @@ FROM pytorch/pytorch:2.7.1-cuda12.8-cudnn9-devel AS builder
 # 设置环境变量避免交互式配置
 ENV DEBIAN_FRONTEND=noninteractive
 
-# 从官方 uv 镜像复制二进制文件（推荐的最佳实践）
-COPY --from=ghcr.io/astral-sh/uv:0.7.13 /uv /uvx /bin/
+# 安装 curl（用于下载 uv 安装脚本）
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/*
+
+# 使用官方安装脚本安装 uv（支持多平台）
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh && mv /root/.cargo/bin/uv /usr/local/bin/ && mv /root/.cargo/bin/uvx /usr/local/bin/
 
 # 设置 uv 环境变量
 ENV UV_COMPILE_BYTECODE=1 \
@@ -19,14 +22,14 @@ WORKDIR /app
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
-    uv sync --locked --no-install-project --no-dev
+    uv sync --locked --no-install-project --no-editable
 
 # 复制项目代码
 COPY . .
 
 # 安装项目
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --no-dev
+    uv sync --locked
 
 # 运行阶段：使用 PyTorch CUDA 运行时镜像
 FROM pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime AS runtime
