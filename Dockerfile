@@ -8,7 +8,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/*
 
 # 使用官方安装脚本安装 uv（支持多平台）
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh && mv /root/.cargo/bin/uv /usr/local/bin/ && mv /root/.cargo/bin/uvx /usr/local/bin/
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh && mv /root/.local/bin/uv /usr/local/bin/ && mv /root/.local/bin/uvx /usr/local/bin/
 
 # 设置 uv 环境变量
 ENV UV_COMPILE_BYTECODE=1 \
