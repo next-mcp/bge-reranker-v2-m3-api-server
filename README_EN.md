@@ -189,6 +189,125 @@ source .venv/bin/activate  # Linux/macOS
 bge-reranker-pre-commit-install
 ```
 
+### 🏷️ Version Management
+
+The project uses `uv` as a one-stop package manager, supporting automatic version management similar to npm functionality.
+
+#### View Current Version
+
+```bash
+# View project current version
+uv version
+
+# View detailed version information (JSON format)
+uv version --output-format json
+```
+
+#### Update Version Number
+
+Using semantic versioning, supports automatic updates to version numbers in `pyproject.toml`:
+
+```bash
+# Increment patch version (1.0.0 -> 1.0.1)
+uv version --bump patch
+
+# Increment minor version (1.0.1 -> 1.1.0)  
+uv version --bump minor
+
+# Increment major version (1.1.0 -> 2.0.0)
+uv version --bump major
+
+# Set specific version number
+uv version 1.2.3
+```
+
+#### Pre-release Version Management
+
+The project fully supports **PEP 440** standard pre-release version numbers, including:
+
+```bash
+# Alpha version (1.0.0 -> 1.0.0a1)
+uv version 1.0.0a1
+
+# Beta version (1.0.0a1 -> 1.0.0b1)  
+uv version 1.0.0b1
+
+# Release Candidate version (1.0.0b1 -> 1.0.0rc1)
+uv version 1.0.0rc1
+
+# Development version (for continuous development)
+uv version 1.0.0.dev1
+```
+
+#### Release Process Best Practices
+
+1. **Development Phase**:
+   ```bash
+   # Development versions
+   uv version 1.1.0.dev1
+   uv version 1.1.0.dev2
+   ```
+
+2. **Pre-release Phase**:
+   ```bash
+   # Alpha testing
+   uv version 1.1.0a1
+   uv version 1.1.0a2
+   
+   # Beta testing  
+   uv version 1.1.0b1
+   uv version 1.1.0b2
+   
+   # Release Candidate
+   uv version 1.1.0rc1
+   ```
+
+3. **Official Release**:
+   ```bash
+   # Stable version
+   uv version 1.1.0
+   ```
+
+#### Version and Docker Tag Correspondence
+
+- **Stable versions** (e.g., `1.0.0`): Push both `1.0.0` and `latest` tags
+- **Pre-release versions** (e.g., `1.0.0a1`, `1.0.0b1`, `1.0.0rc1`): **Only push version number tags**, do not push `latest`
+
+This ensures the `latest` tag always points to the latest stable version, while pre-release versions don't affect production environment users.
+
+#### Automated Workflow
+
+Complete release process combined with Git tags:
+
+```bash
+# 1. Update version number
+uv version --bump minor  # e.g.: 1.0.0 -> 1.1.0
+
+# 2. Commit version changes
+git add pyproject.toml
+git commit -m "chore: bump version to $(uv version --short)"
+
+# 3. Create Git tag
+git tag "v$(uv version --short)"
+
+# 4. Push code and tags
+git push origin main
+git push origin "v$(uv version --short)"
+
+# 5. Publish Docker image (automatically uses version from pyproject.toml)
+./scripts/publish-docker-utf8.bat
+```
+
+#### Using Preview Mode
+
+Preview version changes before actually modifying:
+
+```bash
+# Preview version changes (don't actually modify files)
+uv version --bump patch --dry-run
+uv version 2.0.0 --dry-run
+```
+
 ### Code Checks
 
 The project provides preset script commands:
@@ -290,6 +409,207 @@ docker run -d \
   -p 8000:8000 \
   -v ./models:/root/.cache/huggingface/hub \
   bge-reranker-v2-m3-api-server
+```
+
+### Manual Build and Publish to Docker Hub
+
+If you need to build multi-platform images or custom configurations, you can manually build and publish to Docker Hub:
+
+#### 1. Preparation
+
+```bash
+# Login to Docker Hub
+docker login
+
+# Set image name (replace with your Docker Hub username)
+export DOCKER_USERNAME=your-docker-username
+export IMAGE_NAME=$DOCKER_USERNAME/bge-reranker-v2-m3-api-server
+export VERSION=latest  # or specify version like v1.0.0
+```
+
+#### 2. Single Platform Build (Recommended for quick testing)
+
+```bash
+# Build AMD64 image
+docker build -t $IMAGE_NAME:$VERSION-amd64 .
+
+# Push image
+docker push $IMAGE_NAME:$VERSION-amd64
+
+# Create and push latest tag
+docker tag $IMAGE_NAME:$VERSION-amd64 $IMAGE_NAME:latest
+docker push $IMAGE_NAME:latest
+```
+
+#### 3. Multi-Platform Build (requires buildx)
+
+```bash
+# Create and use buildx builder
+docker buildx create --use --name multiplatform-builder
+docker buildx inspect --bootstrap
+
+# Build and push multi-platform image
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  -t $IMAGE_NAME:$VERSION \
+  -t $IMAGE_NAME:latest \
+  --push .
+
+# Verify image is pushed
+docker buildx imagetools inspect $IMAGE_NAME:$VERSION
+```
+
+#### 4. Complete Publish Script
+
+Create a publish script `scripts/publish-docker.sh`:
+
+```bash
+#!/bin/bash
+set -e
+
+# Configuration
+DOCKER_USERNAME=${DOCKER_USERNAME:-"your-docker-username"}
+IMAGE_NAME="$DOCKER_USERNAME/bge-reranker-v2-m3-api-server"
+VERSION=${1:-"latest"}
+
+echo "🚀 Starting Docker image build and publish..."
+echo "Image name: $IMAGE_NAME"
+echo "Version tag: $VERSION"
+
+# Check if logged into Docker Hub
+if ! docker info | grep -q "Username"; then
+    echo "❌ Please login to Docker Hub first: docker login"
+    exit 1
+fi
+
+# Check if buildx is supported
+if ! docker buildx version > /dev/null 2>&1; then
+    echo "⚠️  buildx not available, using single platform build"
+    
+    # Single platform build
+    echo "🔨 Building AMD64 image..."
+    docker build -t $IMAGE_NAME:$VERSION .
+    
+    echo "📤 Pushing image..."
+    docker push $IMAGE_NAME:$VERSION
+    
+    if [ "$VERSION" != "latest" ]; then
+        docker tag $IMAGE_NAME:$VERSION $IMAGE_NAME:latest
+        docker push $IMAGE_NAME:latest
+    fi
+else
+    echo "🔨 Multi-platform building..."
+    
+    # Create buildx builder (if not exists)
+    if ! docker buildx ls | grep -q multiplatform-builder; then
+        docker buildx create --use --name multiplatform-builder
+        docker buildx inspect --bootstrap
+    else
+        docker buildx use multiplatform-builder
+    fi
+    
+    # Multi-platform build and push
+    TAGS="-t $IMAGE_NAME:$VERSION"
+    if [ "$VERSION" != "latest" ]; then
+        TAGS="$TAGS -t $IMAGE_NAME:latest"
+    fi
+    
+    docker buildx build \
+      --platform linux/amd64,linux/arm64 \
+      $TAGS \
+      --push .
+fi
+
+echo "✅ Image publish completed!"
+echo "📋 View image info:"
+echo "   docker pull $IMAGE_NAME:$VERSION"
+echo "   docker buildx imagetools inspect $IMAGE_NAME:$VERSION"
+```
+
+**Using the publish script:**
+
+**Linux/macOS:**
+```bash
+# Give script execute permission
+chmod +x scripts/publish-docker.sh
+
+# Publish latest version
+./scripts/publish-docker.sh
+
+# Publish specific version
+./scripts/publish-docker.sh v1.0.0
+```
+
+**Windows:**
+```bat
+REM Publish latest version
+scripts\publish-docker.bat
+
+REM Publish specific version
+scripts\publish-docker.bat v1.0.0
+```
+
+#### 5. Verify Publish Results
+
+```bash
+# Check image info
+docker buildx imagetools inspect $IMAGE_NAME:$VERSION
+
+# Pull and test image
+docker pull $IMAGE_NAME:$VERSION
+docker run --rm -p 8000:8000 $IMAGE_NAME:$VERSION
+
+# Test API
+curl http://localhost:8000/health
+```
+
+#### 6. Publishing Notes
+
+- **First publish**: Ensure the corresponding repository is created on Docker Hub
+- **Version tags**: Recommend using semantic versioning (like v1.0.0)
+- **Image size**: Multi-platform builds will increase overall image size
+- **Network environment**: Building requires downloading PyTorch image (~8GB), ensure stable network
+- **Resource requirements**: Multi-platform builds require more CPU and memory resources
+
+#### 7. Automated Publishing (Optional)
+
+If you want to automate the publishing process, consider:
+
+- **GitHub Actions**: Trigger builds only on tag pushes
+- **GitLab CI/CD**: Use GitLab's Docker registry
+- **Docker Hub auto-build**: Connect GitHub repository for automatic builds
+
+**GitHub Actions example configuration (tag-triggered only):**
+
+```yaml
+# In .github/workflows/docker-publish.yml
+name: Publish Docker Image
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/bge-reranker-v2-m3-api-server:latest
+            ${{ secrets.DOCKER_USERNAME }}/bge-reranker-v2-m3-api-server:${{ github.ref_name }}
 ```
 
 ### Docker Configuration

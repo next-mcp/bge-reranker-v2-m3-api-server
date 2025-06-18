@@ -189,6 +189,125 @@ source .venv/bin/activate  # Linux/macOS
 bge-reranker-pre-commit-install
 ```
 
+### 🏷️ 版本管理
+
+项目使用 `uv` 作为一站式包管理器，支持自动版本管理类似 npm 的功能。
+
+#### 查看当前版本
+
+```bash
+# 查看项目当前版本
+uv version
+
+# 查看详细版本信息（JSON格式）
+uv version --output-format json
+```
+
+#### 更新版本号
+
+使用语义化版本控制，支持自动更新 `pyproject.toml` 中的版本号：
+
+```bash
+# 增加补丁版本 (1.0.0 -> 1.0.1)
+uv version --bump patch
+
+# 增加次版本 (1.0.1 -> 1.1.0)  
+uv version --bump minor
+
+# 增加主版本 (1.1.0 -> 2.0.0)
+uv version --bump major
+
+# 设置具体版本号
+uv version 1.2.3
+```
+
+#### 预发布版本管理
+
+项目完全支持 **PEP 440** 标准的预发布版本号，包括：
+
+```bash
+# Alpha 版本 (1.0.0 -> 1.0.0a1)
+uv version 1.0.0a1
+
+# Beta 版本 (1.0.0a1 -> 1.0.0b1)  
+uv version 1.0.0b1
+
+# Release Candidate 版本 (1.0.0b1 -> 1.0.0rc1)
+uv version 1.0.0rc1
+
+# 开发版本 (用于持续开发)
+uv version 1.0.0.dev1
+```
+
+#### 发布流程最佳实践
+
+1. **开发阶段**：
+   ```bash
+   # 开发版本
+   uv version 1.1.0.dev1
+   uv version 1.1.0.dev2
+   ```
+
+2. **预发布阶段**：
+   ```bash
+   # Alpha 测试
+   uv version 1.1.0a1
+   uv version 1.1.0a2
+   
+   # Beta 测试  
+   uv version 1.1.0b1
+   uv version 1.1.0b2
+   
+   # Release Candidate
+   uv version 1.1.0rc1
+   ```
+
+3. **正式发布**：
+   ```bash
+   # 正式版本
+   uv version 1.1.0
+   ```
+
+#### 版本与Docker标签的对应关系
+
+- **正式版本**（如 `1.0.0`）：同时推送 `1.0.0` 和 `latest` 标签
+- **预发布版本**（如 `1.0.0a1`, `1.0.0b1`, `1.0.0rc1`）：**仅推送版本号标签**，不推送 `latest`
+
+这确保 `latest` 标签始终指向最新的稳定版本，而预发布版本不会影响生产环境的用户。
+
+#### 自动化工作流
+
+结合 Git 标签的完整发布流程：
+
+```bash
+# 1. 更新版本号
+uv version --bump minor  # 例如：1.0.0 -> 1.1.0
+
+# 2. 提交版本更改
+git add pyproject.toml
+git commit -m "chore: bump version to $(uv version --short)"
+
+# 3. 创建 Git 标签
+git tag "v$(uv version --short)"
+
+# 4. 推送代码和标签
+git push origin main
+git push origin "v$(uv version --short)"
+
+# 5. 发布 Docker 镜像（自动使用 pyproject.toml 中的版本号）
+./scripts/publish-docker-utf8.bat
+```
+
+#### 使用预览模式
+
+在实际修改前预览版本变更：
+
+```bash
+# 预览版本变更（不实际修改文件）
+uv version --bump patch --dry-run
+uv version 2.0.0 --dry-run
+```
+
 ### 代码检查
 
 项目提供了预设的脚本命令：
@@ -303,6 +422,214 @@ docker run -d \
   -p 8000:8000 \
   -v ./models:/root/.cache/huggingface/hub \
   bge-reranker-v2-m3-api-server
+```
+
+### 手动构建和发布到Docker Hub
+
+如果您需要构建多平台镜像或自定义配置，可以手动构建并发布到Docker Hub：
+
+#### 1. 准备工作
+
+```bash
+# 登录Docker Hub
+docker login
+
+# 设置镜像名称（替换为您的Docker Hub用户名）
+export DOCKER_USERNAME=your-docker-username
+export IMAGE_NAME=$DOCKER_USERNAME/bge-reranker-v2-m3-api-server
+export VERSION=latest  # 或者指定版本号如 v1.0.0
+```
+
+#### 2. 单平台构建（推荐用于快速测试）
+
+```bash
+# 构建AMD64镜像
+docker build -t $IMAGE_NAME:$VERSION-amd64 .
+
+# 推送镜像
+docker push $IMAGE_NAME:$VERSION-amd64
+
+# 创建并推送latest标签
+docker tag $IMAGE_NAME:$VERSION-amd64 $IMAGE_NAME:latest
+docker push $IMAGE_NAME:latest
+```
+
+#### 3. 多平台构建（需要buildx）
+
+```bash
+# 创建并使用buildx构建器
+docker buildx create --use --name multiplatform-builder
+docker buildx inspect --bootstrap
+
+# 构建并推送多平台镜像
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  -t $IMAGE_NAME:$VERSION \
+  -t $IMAGE_NAME:latest \
+  --push .
+
+# 验证镜像已推送
+docker buildx imagetools inspect $IMAGE_NAME:$VERSION
+```
+
+#### 4. 完整的发布脚本
+
+创建一个发布脚本 `scripts/publish-docker.sh`：
+
+```bash
+#!/bin/bash
+set -e
+
+# 配置
+DOCKER_USERNAME=${DOCKER_USERNAME:-"your-docker-username"}
+IMAGE_NAME="$DOCKER_USERNAME/bge-reranker-v2-m3-api-server"
+VERSION=${1:-"latest"}
+
+echo "🚀 开始构建和发布Docker镜像..."
+echo "镜像名称: $IMAGE_NAME"
+echo "版本标签: $VERSION"
+
+# 检查是否已登录Docker Hub
+if ! docker info | grep -q "Username"; then
+    echo "❌ 请先登录Docker Hub: docker login"
+    exit 1
+fi
+
+# 检查是否支持多平台构建
+if ! docker buildx version > /dev/null 2>&1; then
+    echo "⚠️  buildx不可用，使用单平台构建"
+    
+    # 单平台构建
+    echo "🔨 构建AMD64镜像..."
+    docker build -t $IMAGE_NAME:$VERSION .
+    
+    echo "📤 推送镜像..."
+    docker push $IMAGE_NAME:$VERSION
+    
+    if [ "$VERSION" != "latest" ]; then
+        docker tag $IMAGE_NAME:$VERSION $IMAGE_NAME:latest
+        docker push $IMAGE_NAME:latest
+    fi
+else
+    echo "🔨 多平台构建中..."
+    
+    # 创建buildx构建器（如果不存在）
+    if ! docker buildx ls | grep -q multiplatform-builder; then
+        docker buildx create --use --name multiplatform-builder
+        docker buildx inspect --bootstrap
+    else
+        docker buildx use multiplatform-builder
+    fi
+    
+    # 多平台构建并推送
+    TAGS="-t $IMAGE_NAME:$VERSION"
+    if [ "$VERSION" != "latest" ]; then
+        TAGS="$TAGS -t $IMAGE_NAME:latest"
+    fi
+    
+    docker buildx build \
+      --platform linux/amd64,linux/arm64 \
+      $TAGS \
+      --push .
+fi
+
+echo "✅ 镜像发布完成！"
+echo "📋 查看镜像信息："
+echo "   docker pull $IMAGE_NAME:$VERSION"
+echo "   docker buildx imagetools inspect $IMAGE_NAME:$VERSION"
+```
+
+**使用发布脚本：**
+
+**Linux/macOS:**
+```bash
+# 给脚本执行权限
+chmod +x scripts/publish-docker.sh
+
+# 发布latest版本
+./scripts/publish-docker.sh
+
+# 发布指定版本
+./scripts/publish-docker.sh v1.0.0
+```
+
+**Windows:**
+```bat
+REM 方式1：英文版本（推荐，避免乱码）
+scripts\publish-docker.bat
+
+REM 方式2：中文UTF-8版本
+scripts\publish-docker-utf8.bat
+
+REM 方式3：PowerShell版本（推荐，支持彩色输出和中文）
+powershell -ExecutionPolicy Bypass -File scripts\publish-docker-simple.ps1
+
+REM 发布指定版本
+scripts\publish-docker.bat v1.0.0
+powershell -ExecutionPolicy Bypass -File scripts\publish-docker-simple.ps1 -Version v1.0.0
+```
+
+#### 5. 验证发布结果
+
+```bash
+# 检查镜像信息
+docker buildx imagetools inspect $IMAGE_NAME:$VERSION
+
+# 拉取并测试镜像
+docker pull $IMAGE_NAME:$VERSION
+docker run --rm -p 8000:8000 $IMAGE_NAME:$VERSION
+
+# 测试API
+curl http://localhost:8000/health
+```
+
+#### 6. 发布注意事项
+
+- **首次发布**：确保在Docker Hub上已创建对应的仓库
+- **版本标签**：建议使用语义化版本号（如 v1.0.0）
+- **镜像大小**：多平台构建会增加总体镜像大小
+- **网络环境**：构建时需要下载PyTorch镜像（约8GB），确保网络稳定
+- **资源需求**：多平台构建需要更多CPU和内存资源
+
+#### 7. 自动化发布（可选）
+
+如果您想要自动化发布流程，可以考虑：
+
+- **GitHub Actions**：仅在tag推送时触发构建
+- **GitLab CI/CD**：使用GitLab的Docker registry
+- **Docker Hub自动构建**：连接GitHub仓库自动构建
+
+**GitHub Actions示例配置（仅tag触发）：**
+
+```yaml
+# 在.github/workflows/docker-publish.yml
+name: Publish Docker Image
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/bge-reranker-v2-m3-api-server:latest
+            ${{ secrets.DOCKER_USERNAME }}/bge-reranker-v2-m3-api-server:${{ github.ref_name }}
 ```
 
 ### Docker 配置说明
