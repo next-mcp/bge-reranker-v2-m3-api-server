@@ -24,7 +24,7 @@ permissions:
 # 环境变量
 env:
   DOCKER_IMAGE: yarnovo/bge-reranker-v2-m3-api-server
-  PLATFORMS: linux/amd64,linux/arm64
+  PLATFORMS: linux/amd64  # 仅构建AMD64以节省CI资源
 
 # 定义作业
 jobs:
@@ -271,7 +271,7 @@ jobs:
             **[📖 查看 ${{ github.ref_name }} 版本更新内容](${{ github.server_url }}/${{ github.repository }}/commits/${{ github.ref_name }})**
             
             ### ⚡ 性能特性
-            - **多平台支持**: 支持 `linux/amd64` 和 `linux/arm64` 架构
+            - **AMD64架构**: 支持 `linux/amd64` 架构 (ARM64架构请手动构建)
             - **GPU加速**: 自动检测并使用GPU（如果可用）
             - **FP16优化**: 默认启用半精度浮点计算以提升性能
             - **健康检查**: 内置健康检查端点便于容器编排
